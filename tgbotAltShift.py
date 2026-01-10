@@ -19,7 +19,7 @@ bot = telebot.TeleBot("8379708495:AAGWhbXpOVC5Xj7mPdAWJKP-8eVBS6RPHHQ")  # За�
 # Файл для хранения статистики пользователей
 USERS_FILE = "users_data.json"
 # Путь к вашему ZIP-архиву
-ZIP_FILE_PATH = "https://github.com/Fgmod/TGbot/raw/refs/heads/main/AltShift_Fast.zip"  # Замените на реальный путь
+ZIP_FILE_PATH = "https://github.com/Fgmod/TGbot/blob/cb1b96ae0185d6d2aa564576e6575efab788e987/AltShift_Fast.zip"  # Замените на реальный путь
 
 # Класс для управления пользователями
 class UserManager:
