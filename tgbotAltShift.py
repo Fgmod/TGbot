@@ -4,7 +4,10 @@ import json
 import logging
 from datetime import datetime
 from typing import Dict, Any
+from dotenv import load_dotenv
 
+# Загружаем переменные окружения
+load_dotenv()
 
 # Настройка логирования
 logging.basicConfig(
@@ -13,13 +16,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Инициализация бота
-bot = telebot.TeleBot("8379708495:AAGWhbXpOVC5Xj7mPdAWJKP-8eVBS6RPHHQ")  # Замените на свой токен
+# Токен из переменных окружения (безопасно!)
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8379708495:AAGWhbXpOVC5Xj7mPdAWJKP-8eVBS6RPHHQ")
+bot = telebot.TeleBot(BOT_TOKEN)
 
-# Файл для хранения статистики пользователей
-USERS_FILE = "users_data.json"
-# Путь к вашему ZIP-архиву
-ZIP_FILE_PATH = "https://github.com/Fgmod/TGbot/blob/cb1b96ae0185d6d2aa564576e6575efab788e987/AltShift_Fast.zip"  # Замените на реальный путь
+# Определяем базовую директорию
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Файлы теперь в той же директории
+USERS_FILE = os.path.join(BASE_DIR, "users_data.json")
+ZIP_FILE_PATH = os.path.join(BASE_DIR, "AltShift_Fast.zip")
+
+logger.info(f"Базовая директория: {BASE_DIR}")
+logger.info(f"Путь к ZIP: {ZIP_FILE_PATH}")
+logger.info(f"Путь к данным: {USERS_FILE}")
 
 # Класс для управления пользователями
 class UserManager:
@@ -33,9 +43,12 @@ class UserManager:
             if os.path.exists(self.filename):
                 with open(self.filename, 'r', encoding='utf-8') as f:
                     return json.load(f)
+            else:
+                logger.info(f"Файл {self.filename} не найден, создаем новый")
+                return {}
         except Exception as e:
             logger.error(f"Ошибка загрузки пользователей: {e}")
-        return {}
+            return {}
 
     def save_users(self):
         """Сохраняет данные пользователей в файл"""
@@ -291,53 +304,27 @@ def handle_text(message):
     bot.reply_to(message, response)
 
 
-# Функция для автоматической отправки статистики
-def send_daily_stats():
-    """Отправка ежедневной статистики (можно запускать по расписанию)"""
-    stats = f"""
-📊 ЕЖЕДНЕВНАЯ СТАТИСТИКА
-Дата: {datetime.now().strftime('%d.%m.%Y')}
-
-👥 Пользователи: {user_manager.get_total_users()}
-📥 Скачиваний сегодня: {user_manager.get_active_today()}
-🆕 Новых пользователей: {len([u for u in user_manager.users.values()
-                             if u['join_date'].startswith(datetime.now().strftime('%Y-%m-%d'))])}
-    """
-
-    # Здесь можно добавить отправку в канал или админу
-    # bot.send_message(CHANNEL_ID, stats)
-    logger.info(f"Ежедневная статистика: {stats}")
-
-
-# Основная функция запуска бота
-def main():
-    """Запуск бота"""
-    logger.info("Запуск Telegram бота...")
-    logger.info(f"Всего пользователей в базе: {user_manager.get_total_users()}")
-    logger.info(f"ZIP файл доступен: {ZIP_AVAILABLE}")
-
-    # Запуск бота
-    try:
-        bot.infinity_polling(timeout=60, long_polling_timeout=60)
-    except Exception as e:
-        logger.error(f"Ошибка в работе бота: {e}")
+def run_bot():
+    """Функция для бесконечного перезапуска бота при ошибках"""
+    while True:
+        try:
+            logger.info("="*50)
+            logger.info("Запуск Telegram бота...")
+            logger.info(f"Токен: {BOT_TOKEN[:10]}...")  # Логируем только начало токена
+            logger.info(f"Всего пользователей в базе: {user_manager.get_total_users()}")
+            logger.info(f"ZIP файл доступен: {ZIP_AVAILABLE}")
+            logger.info("="*50)
+            
+            bot.infinity_polling(timeout=60, long_polling_timeout=60)
+            
+        except Exception as e:
+            logger.error(f"Бот упал с ошибкой: {e}")
+            logger.info("Перезапуск через 10 секунд...")
+            import time
+            time.sleep(10)
 
 
 # Запуск при условии, что файл запускается напрямую
 if __name__ == "__main__":
-    # ИСПРАВЛЕНИЕ: Создаем папку для данных, только если указан путь к папке
-    users_dir = os.path.dirname(USERS_FILE)
-    if users_dir:  # Если указана папка (например, "data/users.json")
-        os.makedirs(users_dir, exist_ok=True)
-        logger.info(f"Создана папка для данных: {users_dir}")
-
-    # Альтернативный вариант - просто использовать текущую директорию
-    # и создать файл в ней
-    if not os.path.exists(USERS_FILE):
-        # Создаем пустой файл, если его нет
-        with open(USERS_FILE, 'w', encoding='utf-8') as f:
-            json.dump({}, f)
-        logger.info(f"Создан файл данных: {USERS_FILE}")
-
-    # Запускаем бота
-    main()
+    # Запускаем бота с перезапуском при ошибках
+    run_bot()
