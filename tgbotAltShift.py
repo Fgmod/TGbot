@@ -17,7 +17,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Токен из переменных окружения (безопасно!)
-BOT_TOKEN = os.getenv("BOT_TOKEN", "8379708495:AAGWhbXpOVC5Xj7mPdAWJKP-8eVBS6RPHHQ")
+BOT_TOKEN = os.getenv("BOT_TOKEN", "8498564975:AAHDRpdELwIjlxm0o2ueNYf0dHqZvicU58c")
 bot = telebot.TeleBot(BOT_TOKEN)
 
 # Определяем базовую директорию
