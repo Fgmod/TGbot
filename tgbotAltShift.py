@@ -19,7 +19,8 @@ app = Flask(__name__)
 bot_status = {
     "is_running": False,
     "last_start": None,
-    "error_count": 0
+    "error_count": 0,
+    "last_error": None
 }
 
 # Настройка логирования
@@ -35,8 +36,8 @@ logger = logging.getLogger(__name__)
 
 # Токен из переменных окружения
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8498564975:AAHDRpdELwIjlxm0o2ueNYf0dHqZvicU58c")
-if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN не установлен. Установите его в переменных окружения.")
+if not BOT_TOKEN or BOT_TOKEN == "8498564975:AAHDRpdELwIjlxm0o2ueNYf0dHqZvicU58c":
+    raise ValueError("Пожалуйста, установите действительный BOT_TOKEN в переменных окружения")
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
@@ -135,12 +136,11 @@ class UserManager:
 user_manager = UserManager(USERS_FILE)
 
 # Проверка существования ZIP-файла
-if not os.path.exists(ZIP_FILE_PATH):
+ZIP_AVAILABLE = os.path.exists(ZIP_FILE_PATH)
+if not ZIP_AVAILABLE:
     logger.warning(f"ZIP файл не найден по пути: {ZIP_FILE_PATH}")
     logger.info("Бот будет работать, но функция скачивания недоступна")
-    ZIP_AVAILABLE = False
 else:
-    ZIP_AVAILABLE = True
     file_size = os.path.getsize(ZIP_FILE_PATH) / (1024 * 1024)  # Размер в МБ
     logger.info(f"ZIP файл найден. Размер: {file_size:.2f} MB")
 
@@ -249,12 +249,10 @@ def home():
             .online {
                 color: #4CAF50;
                 font-weight: bold;
-                animation: pulse 2s infinite;
             }
-            @keyframes pulse {
-                0% { opacity: 1; }
-                50% { opacity: 0.7; }
-                100% { opacity: 1; }
+            .offline {
+                color: #f44336;
+                font-weight: bold;
             }
         </style>
     </head>
@@ -263,11 +261,14 @@ def home():
             <h1>🤖 AltShift Telegram Bot</h1>
             
             <div class="status-card">
-                <h2>Статус: <span class="online">● ONLINE</span></h2>
+                <h2>Статус: <span class="{% if bot_running %}online{% else %}offline{% endif %}">
+                    ● {% if bot_running %}ONLINE{% else %}OFFLINE{% endif %}
+                </span></h2>
                 <p>Бот работает 24/7 и готов отвечать на запросы</p>
                 <div class="uptime">
-                    Запущен: {{ start_time }}<br>
+                    {% if last_start %}Запущен: {{ last_start }}{% endif %}<br>
                     Ошибок: {{ error_count }}
+                    {% if last_error %}<br>Последняя ошибка: {{ last_error }}{% endif %}
                 </div>
             </div>
             
@@ -292,8 +293,8 @@ def home():
             </div>
             
             <div style="text-align: center; margin: 30px 0;">
-                <a href="https://t.me/your_bot_username" class="btn" target="_blank">
-                    💬 Написать боту в Telegram
+                <a href="https://t.me/theEvil429" class="btn" target="_blank">
+                    💬 Связь с разработчиком
                 </a>
                 <a href="/health" class="btn">
                     🩺 Проверить здоровье
@@ -320,9 +321,11 @@ def home():
         active_today=stats["active_today"],
         total_downloads=stats["total_downloads"],
         last_updated=stats["last_updated"],
-        start_time=bot_status["last_start"] or "Неизвестно",
+        last_start=bot_status["last_start"],
         error_count=bot_status["error_count"],
-        zip_available=ZIP_AVAILABLE
+        last_error=bot_status["last_error"],
+        zip_available=ZIP_AVAILABLE,
+        bot_running=bot_status["is_running"]
     )
 
 
@@ -330,15 +333,17 @@ def home():
 def health():
     """Проверка здоровья сервиса"""
     health_status = {
-        "status": "healthy",
+        "status": "healthy" if bot_status["is_running"] else "unhealthy",
         "bot_running": bot_status["is_running"],
         "timestamp": datetime.now().isoformat(),
         "zip_file_available": ZIP_AVAILABLE,
         "users_file_exists": os.path.exists(USERS_FILE),
         "total_users": user_manager.get_total_users(),
-        "memory_usage": os.path.getsize(USERS_FILE) if os.path.exists(USERS_FILE) else 0
+        "uptime": bot_status["last_start"],
+        "error_count": bot_status["error_count"]
     }
-    return jsonify(health_status), 200
+    status_code = 200 if bot_status["is_running"] else 503
+    return jsonify(health_status), status_code
 
 
 @app.route('/stats')
@@ -346,17 +351,6 @@ def api_stats():
     """API для получения статистики"""
     stats = user_manager.get_statistics()
     return jsonify(stats), 200
-
-
-@app.route('/webhook', methods=['POST'])
-def webhook():
-    """Webhook для Telegram (опционально)"""
-    if request.headers.get('content-type') == 'application/json':
-        json_string = request.get_data().decode('utf-8')
-        update = telebot.types.Update.de_json(json_string)
-        bot.process_new_updates([update])
-        return ''
-    return 'Bad request', 400
 
 
 @app.route('/restart', methods=['POST'])
@@ -545,6 +539,7 @@ def run_telegram_bot():
         try:
             bot_status["is_running"] = True
             bot_status["last_start"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            bot_status["last_error"] = None
             
             logger.info("=" * 50)
             logger.info("Запуск Telegram бота...")
@@ -553,11 +548,26 @@ def run_telegram_bot():
             logger.info(f"ZIP файл доступен: {ZIP_AVAILABLE}")
             logger.info("=" * 50)
 
-            bot.infinity_polling(timeout=60, long_polling_timeout=60, restart_on_change=True)
+            # УБРАЛ restart_on_change=True - это вызывало ошибку
+            bot.infinity_polling(timeout=60, long_polling_timeout=60)
 
+        except telebot.apihelper.ApiException as e:
+            bot_status["error_count"] += 1
+            bot_status["is_running"] = False
+            bot_status["last_error"] = str(e)
+            
+            logger.error(f"Ошибка API Telegram: {e}")
+            if "Forbidden: bot was blocked by the user" in str(e):
+                logger.info("Бот заблокирован пользователем, продолжаем работу")
+                time.sleep(5)
+                continue
+            logger.info("Перезапуск через 10 секунд...")
+            time.sleep(10)
+            
         except Exception as e:
             bot_status["error_count"] += 1
             bot_status["is_running"] = False
+            bot_status["last_error"] = str(e)
             
             logger.error(f"Бот упал с ошибкой: {e}")
             logger.info("Перезапуск через 10 секунд...")
@@ -569,18 +579,42 @@ def start_bot_in_thread():
     bot_thread = threading.Thread(target=run_telegram_bot, daemon=True)
     bot_thread.start()
     logger.info("Telegram бот запущен в отдельном потоке")
+    return bot_thread
+
+
+# Функция для безопасного завершения
+def signal_handler(signum, frame):
+    """Обработчик сигналов завершения"""
+    logger.info("Получен сигнал завершения, останавливаем бота...")
+    bot_status["is_running"] = False
+    # Можно добавить логику для корректного завершения
 
 
 # Запуск приложения
 if __name__ == "__main__":
+    # Убедимся, что файл users_data.json существует
+    if not os.path.exists(USERS_FILE):
+        with open(USERS_FILE, 'w', encoding='utf-8') as f:
+            json.dump({}, f)
+        logger.info(f"Создан файл {USERS_FILE}")
+
     # Запускаем Telegram бот в отдельном потоке
-    start_bot_in_thread()
+    bot_thread = start_bot_in_thread()
     
     # Определяем порт для Render
     port = int(os.environ.get("PORT", 5000))
     
     # Запускаем Flask сервер
     logger.info(f"Запуск Flask сервера на порту {port}...")
+    
+    # Простая проверка, что бот запустился
+    time.sleep(2)
+    
+    if bot_status["is_running"]:
+        logger.info("✅ Бот успешно запущен и работает")
+    else:
+        logger.warning("⚠️ Бот не запустился, проверьте настройки")
+    
     app.run(
         host='0.0.0.0',
         port=port,
