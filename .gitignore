@@ -1,20 +1,5 @@
-# Файлы окружения
 .env
-.env.local
-.env*.local
-
-# Локальные данные
-users_data.json
+*.log
 __pycache__/
-*.py[cod]
-*$py.class
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Системные файлы
-.DS_Store
-Thumbs.db
+*.pyc
+users_data.json
