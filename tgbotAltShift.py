@@ -6,6 +6,29 @@ from datetime import datetime
 from typing import Dict, Any
 from dotenv import load_dotenv
 
+# Добавьте в начало импорты
+from flask import Flask, request
+import threading
+import time
+
+#-----------------------------------
+# Создаем Flask приложение
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "🤖 Telegram бот работает! Статус: онлайн"
+
+@app.route('/health')
+def health():
+    return "OK", 200
+
+# Запуск Flask в отдельном потоке
+def run_flask():
+    app.run(host='0.0.0.0', port=5000)
+#------------------------------------
+
+
 # Загружаем переменные окружения
 load_dotenv()
 
@@ -30,6 +53,7 @@ ZIP_FILE_PATH = os.path.join(BASE_DIR, "AltShift_Fast.zip")
 logger.info(f"Базовая директория: {BASE_DIR}")
 logger.info(f"Путь к ZIP: {ZIP_FILE_PATH}")
 logger.info(f"Путь к данным: {USERS_FILE}")
+
 
 # Класс для управления пользователями
 class UserManager:
@@ -308,15 +332,15 @@ def run_bot():
     """Функция для бесконечного перезапуска бота при ошибках"""
     while True:
         try:
-            logger.info("="*50)
+            logger.info("=" * 50)
             logger.info("Запуск Telegram бота...")
             logger.info(f"Токен: {BOT_TOKEN[:10]}...")  # Логируем только начало токена
             logger.info(f"Всего пользователей в базе: {user_manager.get_total_users()}")
             logger.info(f"ZIP файл доступен: {ZIP_AVAILABLE}")
-            logger.info("="*50)
-            
+            logger.info("=" * 50)
+
             bot.infinity_polling(timeout=60, long_polling_timeout=60)
-            
+
         except Exception as e:
             logger.error(f"Бот упал с ошибкой: {e}")
             logger.info("Перезапуск через 10 секунд...")
@@ -324,7 +348,21 @@ def run_bot():
             time.sleep(10)
 
 
+#--------------------------------------------------------
+# В конце файла, перед run_bot():
+def main():
+    """Запуск бота и веб-сервера"""
+
+    # Запускаем веб-сервер в отдельном потоке
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+
+    logger.info("Веб-сервер запущен на порту 5000")
+
+    # Запускаем бота
+    run_bot()
+
 # Запуск при условии, что файл запускается напрямую
 if __name__ == "__main__":
     # Запускаем бота с перезапуском при ошибках
-    run_bot()
+    main()
