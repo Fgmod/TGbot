@@ -577,13 +577,11 @@ if __name__ == "__main__":
     start_bot_in_thread()
     
     # Определяем порт для Render
-    port = int(os.environ.get("PORT", 5000))
+    port = 5000
     
     # Запускаем Flask сервер
     logger.info(f"Запуск Flask сервера на порту {port}...")
-    app.run(
-        host='0.0.0.0',
-        port=port,
-        debug=False,
-        use_reloader=False  # Отключаем reloader для работы в Render
-    )
+    if __name__ == "__main__":
+        start_bot_in_thread()
+        app.run()
+
